@@ -1,58 +1,53 @@
 library(shiny)
-library(shinyDataFilter)
-
-library(dplyr)  # for data preprocessing and example data
-
-# prep a new data.frame with more diverse data types
-starwars2 <- starwars %>%
-  mutate_if(~is.numeric(.) && all(Filter(Negate(is.na), .) %% 1 == 0), as.integer) %>%
-  mutate_if(~is.character(.) && length(unique(.)) <= 25, as.factor) %>%
-  mutate(is_droid = species == "Droid") %>%
-  select(name, gender, height, mass, hair_color, eye_color, vehicles, is_droid)
-
-# create some labels to showcase column select input
-attr(starwars2$name, "label")     <- "name of character"
-attr(starwars2$gender, "label")   <- "gender of character"
-attr(starwars2$height, "label")   <- "height of character in centimeters"
-attr(starwars2$mass, "label")     <- "mass of character in kilograms"
-attr(starwars2$is_droid, "label") <- "whether character is a droid"
+library(lubridate)
+library(sodium)
+library(jsonlite)
 
 ui <- fluidPage(
-  titlePanel("Filter Data Example"),
-  fluidRow(
-    column(8,
-           verbatimTextOutput("data_summary"),
-           verbatimTextOutput("data_filter_code")
-    ),
-    column(4,
-           shiny_data_filter_ui("data_filter")
+  titlePanel("Explore Session Meta"),
+  sidebarLayout(
+    NULL,
+    mainPanel(
+      
+      fluidPage(
+        fluidRow(
+          helpText("Session user info"),
+          verbatimTextOutput("curr_auth")
+        ),
+        fluidRow(
+          helpText("Environment Var Lookup Panel"),
+          inputPanel(
+            textInput(
+              inputId = "env_var_name",
+              label = NULL,
+              placeholder = "env name"
+            ),
+            verbatimTextOutput("env_var_value")
+          )
+          
+        )
+      )
+      
     )
   )
 )
 
-server <- function(input, output, session) {
-  filtered_data <- callModule(
-    shiny_data_filter,
-    "data_filter",
-    data = starwars2,
-    verbose = TRUE
-  )
+server <- shinyServer(function(input, output, session) {
   
-  output$data_filter_code <- renderPrint({
-    cat(gsub("%>%", "%>% \n ",
-             gsub("\\s{2,}", " ",
-                  paste0(
-                    capture.output(attr(filtered_data(), "code")),
-                    collapse = " "
-                  )
-             )
-    ))
+  r_auth_ll <- reactive({
+    
+    usr <- session$user
+    grp <- session$groups
+    
+    list(username = usr, groups = grp)
+    
   })
   
-  output$data_summary <- renderPrint({
-    if (nrow(filtered_data())) show(filtered_data())
-    else "No data available"
-  })
-}
+  
+  output$curr_auth <- renderText(jsonlite::prettify(jsonlite::toJSON(r_auth_ll())))
+  
+  
+  output$env_var_value <- renderText(Sys.getenv(x = input$env_var_name, "NA"))
+})
 
 shinyApp(ui = ui, server = server)
